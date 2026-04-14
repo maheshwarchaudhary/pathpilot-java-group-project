@@ -76,7 +76,7 @@
 
 <body class="bg-[#f8f9fc] antialiased">
 
-<jsp:include page="/WEB-INF/views/components/student_navbar.jsp"/>
+<jsp:include page="/WEB-INF/views/components/user_navbar.jsp"/>
 
 <div class="max-w-4xl mx-auto py-20 px-6">
     <div class="bg-white rounded-[2.5rem] shadow-sm border border-gray-100 p-12">

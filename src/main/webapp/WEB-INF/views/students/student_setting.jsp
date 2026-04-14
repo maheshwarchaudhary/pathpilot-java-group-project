@@ -57,15 +57,7 @@
 
 <body class="bg-bg-main min-h-screen flex antialiased overflow-x-hidden">
 
-    <%-- 🧭 Sidebar: Automatic Role Detection --%>
-    <c:choose>
-        <c:when test="${sessionScope.role == 'STUDENT'}">
-            <jsp:include page="/WEB-INF/views/components/student_sidebar.jsp"/>
-        </c:when>
-        <c:otherwise>
-            <jsp:include page="/WEB-INF/views/components/user_sidebar.jsp"/>
-        </c:otherwise>
-    </c:choose>
+    <jsp:include page="/WEB-INF/views/components/user_sidebar.jsp"/>
 
     <main class="flex-grow p-6 lg:p-10 overflow-y-auto">
         

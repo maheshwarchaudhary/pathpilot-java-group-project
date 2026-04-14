@@ -51,7 +51,7 @@
 
 <body class="bg-[#f8f9fc] text-gray-900 antialiased">
 
-<jsp:include page="/WEB-INF/views/components/student_navbar.jsp"/>
+<jsp:include page="/WEB-INF/views/components/user_navbar.jsp"/>
 
 <section class="relative bg-gradient-to-br from-indigo-700 via-primary to-purple-800 text-white py-32 px-6 overflow-hidden">
     <div class="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>

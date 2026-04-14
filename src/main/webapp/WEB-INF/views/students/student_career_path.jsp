@@ -81,7 +81,7 @@
 <body class="bg-[#f8f9fc] antialiased">
 
 <%-- Calling the shared horizontal navbar component --%>
-<jsp:include page="/WEB-INF/views/components/student_navbar.jsp"/>
+<jsp:include page="/WEB-INF/views/components/user_navbar.jsp"/>
 
 <header class="bg-white border-b border-gray-100 py-16">
     <div class="max-w-7xl mx-auto px-6">

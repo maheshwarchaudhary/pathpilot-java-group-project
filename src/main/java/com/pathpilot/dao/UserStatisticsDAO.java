@@ -2,6 +2,7 @@ package com.pathpilot.dao;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.time.LocalDate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -104,7 +105,7 @@ public class UserStatisticsDAO {
         jdbcTemplate.update(sql, enrollmentId, userId, phaseId, durationMinutes, contentStudied);
         
         // Update user activity
-        updateUserActivityLog(userId);
+        updateUserActivityLog(userId, durationMinutes);
         
         // Update streak
         updateUserStreak(userId);
@@ -113,51 +114,86 @@ public class UserStatisticsDAO {
     /**
      * Update daily user activity log
      */
-    private void updateUserActivityLog(int userId) {
+    private void updateUserActivityLog(int userId, int durationMinutes) {
         String sql = "INSERT INTO user_activity_log " +
                      "(user_id, activity_date, session_count, total_learning_minutes) " +
-                     "VALUES (?, DATE(NOW()), 1, 0) " +
+                     "VALUES (?, DATE(NOW()), 1, ?) " +
                      "ON DUPLICATE KEY UPDATE " +
                      "session_count = session_count + 1, " +
+                     "total_learning_minutes = total_learning_minutes + VALUES(total_learning_minutes), " +
                      "updated_at = CURRENT_TIMESTAMP";
 
-        jdbcTemplate.update(sql, userId);
+        jdbcTemplate.update(sql, userId, Math.max(0, durationMinutes));
     }
 
     /**
      * Update user streak
      */
     private void updateUserStreak(int userId) {
-        // Get or create streak record
-        String checkSql = "SELECT current_streak, last_activity_date FROM user_streaks WHERE user_id = ?";
+        String checkSql = "SELECT current_streak, longest_streak, last_activity_date, streak_started_date FROM user_streaks WHERE user_id = ?";
         try {
             Map<String, Object> streak = jdbcTemplate.queryForMap(checkSql, userId);
             
-            java.sql.Date lastActivityDate = (java.sql.Date) streak.get("last_activity_date");
-            int currentStreak = ((Number) streak.get("current_streak")).intValue();
-            
-            // If last activity was yesterday, increment streak
-            java.sql.Date today = new java.sql.Date(System.currentTimeMillis());
-            java.sql.Date yesterday = new java.sql.Date(today.getTime() - (24 * 60 * 60 * 1000));
-            
-            if (lastActivityDate != null && lastActivityDate.equals(yesterday)) {
-                // Continue streak
-                int newStreak = currentStreak + 1;
-                String updateSql = "UPDATE user_streaks SET current_streak = ?, last_activity_date = ?, " +
-                                 "longest_streak = GREATEST(longest_streak, ?) WHERE user_id = ?";
-                jdbcTemplate.update(updateSql, newStreak, today, newStreak, userId);
-            } else if (lastActivityDate == null || !lastActivityDate.equals(today)) {
-                // Reset or start new streak
-                String updateSql = "UPDATE user_streaks SET current_streak = 1, last_activity_date = ?, " +
-                                 "streak_started_date = ?, longest_streak = GREATEST(longest_streak, current_streak) WHERE user_id = ?";
-                jdbcTemplate.update(updateSql, today, today, userId);
+            LocalDate today = LocalDate.now();
+            LocalDate yesterday = today.minusDays(1);
+            LocalDate lastActivityDate = toLocalDate(streak.get("last_activity_date"));
+
+            int currentStreak = ((Number) streak.getOrDefault("current_streak", 0)).intValue();
+            int longestStreak = ((Number) streak.getOrDefault("longest_streak", 0)).intValue();
+
+            if (lastActivityDate != null && lastActivityDate.isEqual(today)) {
+                return;
             }
+
+            int nextStreak = (lastActivityDate != null && lastActivityDate.isEqual(yesterday)) ? currentStreak + 1 : 1;
+            int nextLongest = Math.max(longestStreak, nextStreak);
+            LocalDate streakStartDate = (lastActivityDate != null && lastActivityDate.isEqual(yesterday))
+                    ? (toLocalDate(streak.get("streak_started_date")) != null ? toLocalDate(streak.get("streak_started_date")) : yesterday)
+                    : today;
+
+            String updateSql = "UPDATE user_streaks SET current_streak = ?, longest_streak = ?, last_activity_date = ?, streak_started_date = ? WHERE user_id = ?";
+            jdbcTemplate.update(updateSql, nextStreak, nextLongest, today, streakStartDate, userId);
         } catch (Exception e) {
-            // Create new streak if doesn't exist
-            java.sql.Date today = new java.sql.Date(System.currentTimeMillis());
-            String insertSql = "INSERT INTO user_streaks (user_id, current_streak, longest_streak, last_activity_date, streak_started_date) " +
-                             "VALUES (?, 1, 1, ?, ?)";
-            jdbcTemplate.update(insertSql, userId, today, today);
+            String upsertSql = "INSERT INTO user_streaks (user_id, current_streak, longest_streak, last_activity_date, streak_started_date) " +
+                    "VALUES (?, 1, 1, CURDATE(), CURDATE()) " +
+                    "ON DUPLICATE KEY UPDATE " +
+                    "current_streak = CASE " +
+                    "  WHEN last_activity_date = CURDATE() THEN current_streak " +
+                    "  WHEN last_activity_date = DATE_SUB(CURDATE(), INTERVAL 1 DAY) THEN current_streak + 1 " +
+                    "  ELSE 1 END, " +
+                    "longest_streak = GREATEST(longest_streak, CASE " +
+                    "  WHEN last_activity_date = CURDATE() THEN current_streak " +
+                    "  WHEN last_activity_date = DATE_SUB(CURDATE(), INTERVAL 1 DAY) THEN current_streak + 1 " +
+                    "  ELSE 1 END), " +
+                    "last_activity_date = CURDATE(), " +
+                    "streak_started_date = CASE " +
+                    "  WHEN last_activity_date = DATE_SUB(CURDATE(), INTERVAL 1 DAY) THEN COALESCE(streak_started_date, CURDATE()) " +
+                    "  ELSE CURDATE() END, " +
+                    "updated_at = CURRENT_TIMESTAMP";
+            jdbcTemplate.update(upsertSql, userId);
         }
+    }
+
+    private LocalDate toLocalDate(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof LocalDate) {
+            return (LocalDate) value;
+        }
+        if (value instanceof java.sql.Date) {
+            return ((java.sql.Date) value).toLocalDate();
+        }
+        if (value instanceof java.sql.Timestamp) {
+            return ((java.sql.Timestamp) value).toLocalDateTime().toLocalDate();
+        }
+        if (value instanceof java.util.Date) {
+            return new java.sql.Date(((java.util.Date) value).getTime()).toLocalDate();
+        }
+        try {
+            return LocalDate.parse(String.valueOf(value));
+        } catch (Exception ex) {
+            return null;
+            }
     }
 }

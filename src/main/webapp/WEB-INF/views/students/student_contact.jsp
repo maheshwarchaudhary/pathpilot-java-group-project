@@ -97,7 +97,7 @@
 
 <body class="bg-[#f8f9fc] text-gray-900 min-h-screen flex flex-col antialiased">
 
-<jsp:include page="/WEB-INF/views/components/student_navbar.jsp"/>
+<jsp:include page="/WEB-INF/views/components/user_navbar.jsp"/>
 
 <section class="bg-gradient-to-br from-indigo-700 via-primary to-purple-800 text-white py-20">
     <div class="max-w-7xl mx-auto px-12 text-center md:text-left">

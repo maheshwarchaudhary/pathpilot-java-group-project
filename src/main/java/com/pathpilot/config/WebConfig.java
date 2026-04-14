@@ -1,6 +1,9 @@
 package com.pathpilot.config;
 
 import java.util.Properties;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import javax.sql.DataSource;
 
 import org.springframework.context.annotation.Bean;
@@ -11,11 +14,16 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.web.multipart.support.StandardServletMultipartResolver;
+import org.springframework.http.MediaType;
+import org.springframework.http.converter.HttpMessageConverter;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.web.servlet.ViewResolver;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import org.springframework.web.servlet.view.InternalResourceViewResolver;
+import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 @EnableWebMvc
@@ -40,12 +48,21 @@ public class WebConfig implements WebMvcConfigurer {
         // Standard project assets (CSS, JS)
         registry.addResourceHandler("/assets/**")
                 .addResourceLocations("/assets/");
-        
-        /**
-         * 🔥 CRITICAL: External upload folder on Drive D
-         */
+
+        Path uploadRoot = Paths.get(System.getProperty("user.dir"), "src", "main", "webapp", "assets", "uploads")
+            .toAbsolutePath()
+            .normalize();
+        try {
+            Files.createDirectories(uploadRoot);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to create upload directory: " + uploadRoot, e);
+        }
+
+        String uploadLocation = uploadRoot.toUri().toString();
         registry.addResourceHandler("/uploads/**")
-                .addResourceLocations("file:///D:/pathpilot/uploads/");
+            .addResourceLocations(uploadLocation);
+        registry.addResourceHandler("/assets/uploads/**")
+            .addResourceLocations(uploadLocation);
     }
 
     // 3. Configure JavaMailSender
@@ -92,5 +109,15 @@ public class WebConfig implements WebMvcConfigurer {
     @Bean(name = "multipartResolver")
     public StandardServletMultipartResolver multipartResolver() {
         return new StandardServletMultipartResolver();
+    }
+
+    @Override
+    public void extendMessageConverters(List<HttpMessageConverter<?>> converters) {
+        MappingJackson2HttpMessageConverter jsonConverter = new MappingJackson2HttpMessageConverter();
+        jsonConverter.setSupportedMediaTypes(Arrays.asList(
+                MediaType.APPLICATION_JSON,
+                MediaType.valueOf("application/*+json")
+        ));
+        converters.add(0, jsonConverter);
     }
 }

@@ -3,6 +3,7 @@ package com.pathpilot.dao;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Repository;
 import com.pathpilot.model.QuizResponse;
 import java.util.List;
@@ -22,10 +23,28 @@ public class QuizResponseDAO {
      * CREATE - Record user's quiz response
      */
     public int addResponse(QuizResponse response) {
-        String sql = "INSERT INTO quiz_responses (phase_progress_id, question_id, selected_answer, is_correct) " +
-                     "VALUES (?, ?, ?, ?)";
-        return jdbcTemplate.update(sql, response.getPhaseProgressId(), response.getQuestionId(), 
-                                   response.getSelectedAnswer(), response.isCorrect());
+        String[] sqlCandidates = new String[] {
+                "INSERT INTO quiz_responses (phase_progress_id, question_id, selected_answer, is_correct) VALUES (?, ?, ?, ?)",
+                "INSERT INTO quiz_responses (progress_id, question_id, selected_answer, is_correct) VALUES (?, ?, ?, ?)",
+                "INSERT INTO quiz_responses (phase_progress_id, question_id, selected_option, is_correct) VALUES (?, ?, ?, ?)",
+                "INSERT INTO quiz_responses (progress_id, question_id, selected_option, is_correct) VALUES (?, ?, ?, ?)",
+                "INSERT INTO quiz_responses (phase_progress_id, question_id, selected_answer, correct) VALUES (?, ?, ?, ?)",
+                "INSERT INTO quiz_responses (progress_id, question_id, selected_answer, correct) VALUES (?, ?, ?, ?)",
+                "INSERT INTO quiz_responses (phase_progress_id, question_id, selected_option, correct) VALUES (?, ?, ?, ?)",
+                "INSERT INTO quiz_responses (progress_id, question_id, selected_option, correct) VALUES (?, ?, ?, ?)"
+        };
+
+        DataAccessException lastException = null;
+        for (String sql : sqlCandidates) {
+            try {
+                return jdbcTemplate.update(sql, response.getPhaseProgressId(), response.getQuestionId(),
+                        response.getSelectedAnswer(), response.isCorrect());
+            } catch (DataAccessException ex) {
+                lastException = ex;
+            }
+        }
+
+        throw lastException != null ? lastException : new RuntimeException("Failed to insert quiz response");
     }
 
     /**
@@ -98,8 +117,21 @@ public class QuizResponseDAO {
      * DELETE - Delete all responses for a phase progress
      */
     public int deleteResponsesByPhaseProgressId(int phaseProgressId) {
-        String sql = "DELETE FROM quiz_responses WHERE phase_progress_id = ?";
-        return jdbcTemplate.update(sql, phaseProgressId);
+        String[] sqlCandidates = new String[] {
+                "DELETE FROM quiz_responses WHERE phase_progress_id = ?",
+                "DELETE FROM quiz_responses WHERE progress_id = ?"
+        };
+
+        DataAccessException lastException = null;
+        for (String sql : sqlCandidates) {
+            try {
+                return jdbcTemplate.update(sql, phaseProgressId);
+            } catch (DataAccessException ex) {
+                lastException = ex;
+            }
+        }
+
+        throw lastException != null ? lastException : new RuntimeException("Failed to delete quiz responses");
     }
 
     /**

@@ -52,7 +52,7 @@
 <body class="bg-[#f8f9fc] antialiased">
 
 <%-- This call ensures the exact same navbar design is used --%>
-<jsp:include page="/WEB-INF/views/components/student_navbar.jsp"/>
+<jsp:include page="/WEB-INF/views/components/user_navbar.jsp"/>
 
 <header class="max-w-7xl mx-auto px-6 py-24">
     <span class="bg-indigo-50 text-primary px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border border-indigo-100">

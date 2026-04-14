@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.Arrays;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import jakarta.servlet.http.HttpServletRequest;
@@ -112,14 +113,14 @@ public class UserController {
     public String profile(HttpSession session) {
         String r = checkAccess(session);
         if (r != null) return r;
-        return "user/user_profile";
+        return "redirect:/student/profile";
     }
 
     @GetMapping("/settings")
     public String settings(HttpSession session) {
         String r = checkAccess(session);
         if (r != null) return r;
-        return "user/user_setting";
+        return "redirect:/student/settings";
     }
 
     // ==========================================
@@ -156,7 +157,7 @@ public class UserController {
     public String features(HttpSession session) {
         String r = checkAccess(session);
         if (r != null) return r;
-        return "user/user_features";
+        return "redirect:/student/features";
     }
     
     @GetMapping("/learner-mgmt")
@@ -257,15 +258,16 @@ public class UserController {
         // 2. 📂 FILE UPLOAD (D:\ drive storage)
         if (file != null && !file.isEmpty()) {
             try {
-                String uploadDir = "D:/pathpilot/uploads/";
-                File dir = new File(uploadDir);
-                if (!dir.exists()) dir.mkdirs();
+                Path uploadRoot = resolveUploadRoot();
+                String originalName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "profile.jpg";
+                String safeName = originalName.replaceAll("[^a-zA-Z0-9._-]", "_");
+                String fileName = "profile_" + userId + "_" + System.currentTimeMillis() + "_" + safeName;
+                Path target = uploadRoot.resolve(fileName);
 
-                String fileName = "profile_" + userId + "_" + System.currentTimeMillis() + ".jpg";
-                File dest = new File(dir.getAbsolutePath() + File.separator + fileName);
-
-                file.transferTo(dest);
-                currentProfilePic = "/uploads/" + fileName;
+                Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+                currentProfilePic = "/assets/uploads/" + fileName;
+                System.out.println("[UPLOAD][USER][PROFILE] saved=" + target.toAbsolutePath());
+                System.out.println("[UPLOAD][USER][PROFILE] exists=" + Files.exists(target) + " size=" + Files.size(target));
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -771,11 +773,12 @@ public class UserController {
         return videoId != null ? "https://www.youtube.com/embed/" + videoId : url;
     }
 
-    @PostMapping("/create-path/upload-phase-file")
+    @PostMapping({"/create-path/upload-phase-file", "/edit-path/upload-phase-file"})
     @ResponseBody
     public ResponseEntity<String> uploadPhaseFile(
             @RequestParam("pathId") int pathId,
-            @RequestParam("phaseNumber") int phaseNumber,
+            @RequestParam(value = "phaseNumber", required = false) Integer phaseNumber,
+            @RequestParam(value = "phaseId", required = false) Integer phaseId,
             @RequestParam("attachment") MultipartFile attachment,
             HttpSession session) {
         String access = checkAccess(session);
@@ -788,6 +791,15 @@ public class UserController {
                 return ResponseEntity.badRequest().body("ERROR: No file provided");
             }
 
+            if (!isAllowedDocumentAttachment(attachment)) {
+                return ResponseEntity.badRequest().body("ERROR: Only PDF, DOC, DOCX files are allowed");
+            }
+
+            final long maxSizeBytes = 50L * 1024L * 1024L;
+            if (attachment.getSize() > maxSizeBytes) {
+                return ResponseEntity.badRequest().body("ERROR: File size must be <= 50MB");
+            }
+
             CareerPath path = pathDAO.getPathById(pathId);
             if (path == null) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body("ERROR: Path not found");
@@ -798,42 +810,128 @@ public class UserController {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body("ERROR: Unauthorized");
             }
 
-            Phase phase = phaseDAO.getPhaseByPathIdAndNumber(pathId, phaseNumber);
+            Phase phase = null;
+            if (phaseId != null && phaseId > 0) {
+                Phase byId = phaseDAO.getPhaseById(phaseId);
+                if (byId != null && byId.getPathId() == pathId) {
+                    phase = byId;
+                }
+            }
+
+            if (phase == null && phaseNumber != null && phaseNumber > 0) {
+                phase = phaseDAO.getPhaseByPathIdAndNumber(pathId, phaseNumber);
+                if (phase == null) {
+                    List<Phase> phases = phaseDAO.getPhasesByPathId(pathId);
+                    int index = phaseNumber - 1;
+                    if (index >= 0 && index < phases.size()) {
+                        phase = phases.get(index);
+                    }
+                }
+            }
+
             if (phase == null) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("ERROR: Phase not found");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("ERROR: Phase not found for upload");
             }
 
             String originalName = attachment.getOriginalFilename() != null ? attachment.getOriginalFilename() : "resource";
             String safeName = originalName.replaceAll("[^a-zA-Z0-9._-]", "_");
-            String fileName = "path_" + pathId + "_phase_" + phaseNumber + "_" + System.currentTimeMillis() + "_" + safeName;
+            int phaseMarker = phaseNumber != null && phaseNumber > 0 ? phaseNumber : phase.getPhaseNumber();
+            String fileName = "path_" + pathId + "_phase_" + phaseMarker + "_" + System.currentTimeMillis() + "_" + safeName;
 
-            Path uploadRoot = Paths.get("D:/pathpilot/uploads");
-            Files.createDirectories(uploadRoot);
+            Path uploadRoot = resolveUploadRoot();
             Path target = uploadRoot.resolve(fileName);
             Files.copy(attachment.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+            System.out.println("[UPLOAD][USER][CAREER] saved=" + target.toAbsolutePath());
+            System.out.println("[UPLOAD][USER][CAREER] exists=" + Files.exists(target) + " size=" + Files.size(target));
 
-            String mime = attachment.getContentType() != null ? attachment.getContentType() : "application/octet-stream";
-            String resourceType = mime.contains("pdf") ? "PDF" : "DOCUMENT";
+                String mime = attachment.getContentType() != null && !attachment.getContentType().trim().isEmpty()
+                    ? attachment.getContentType()
+                    : detectMimeTypeByName(originalName);
+                String resourceType = detectResourceTypeByNameOrMime(originalName, mime);
 
-            phaseResourceDAO.deleteResourcesByPhaseAndType(phase.getPhaseId(), "PDF");
-            phaseResourceDAO.deleteResourcesByPhaseAndType(phase.getPhaseId(), "DOCUMENT");
+                String persistedFilePath = "/assets/uploads/" + fileName;
+                int savedRows = phaseResourceDAO.saveOrUpdateDocumentResource(
+                    phase.getPhaseId(),
+                    resourceType,
+                    originalName,
+                    persistedFilePath,
+                    attachment.getSize(),
+                    mime,
+                    userId
+                );
 
-            PhaseResource resource = new PhaseResource();
-            resource.setPhaseId(phase.getPhaseId());
-            resource.setResourceType(resourceType);
-            resource.setResourceName(originalName);
-            resource.setFilePath("/uploads/" + fileName);
-            resource.setFileSize(attachment.getSize());
-            resource.setMimeType(mime);
-            resource.setUploadedBy(userId);
-            phaseResourceDAO.addResource(resource);
+                if (savedRows <= 0) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("ERROR: Failed to persist uploaded file metadata");
+                }
 
-            return ResponseEntity.ok("RESOURCE_SAVED|" + resource.getFilePath() + "|" + originalName);
+                PhaseResource persisted = phaseResourceDAO.getLatestDocumentResourceByPhaseId(phase.getPhaseId());
+                if (persisted == null || persisted.getFilePath() == null || persisted.getFilePath().trim().isEmpty()) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("ERROR: File metadata saved incompletely (file_path missing)");
+                }
+
+                return ResponseEntity.ok("RESOURCE_SAVED|" + persisted.getFilePath() + "|" + originalName);
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("ERROR: Upload failed");
+                    .body("ERROR: Upload failed - " + (e.getMessage() != null ? e.getMessage() : "Unexpected error"));
         }
+    }
+
+    private Path resolveUploadRoot() throws IOException {
+        java.util.List<Path> candidates = Arrays.asList(
+                Paths.get("D:/RGM/pathpilot/src/main/webapp/assets/uploads"),
+                Paths.get(System.getProperty("user.dir"), "src", "main", "webapp", "assets", "uploads").toAbsolutePath().normalize()
+        );
+
+        IOException last = null;
+        for (Path candidate : candidates) {
+            try {
+                Files.createDirectories(candidate);
+                if (Files.isDirectory(candidate) && Files.isWritable(candidate)) {
+                    return candidate;
+                }
+            } catch (IOException ex) {
+                last = ex;
+            }
+        }
+
+        if (last != null) {
+            throw last;
+        }
+        throw new IOException("No writable upload directory available at project assets/uploads");
+    }
+
+    private boolean isAllowedDocumentAttachment(MultipartFile attachment) {
+        String fileName = attachment.getOriginalFilename() != null ? attachment.getOriginalFilename().toLowerCase(Locale.ROOT) : "";
+        return fileName.endsWith(".pdf") || fileName.endsWith(".doc") || fileName.endsWith(".docx");
+    }
+
+    private String detectMimeTypeByName(String fileName) {
+        if (fileName == null) {
+            return "application/octet-stream";
+        }
+        String lower = fileName.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".pdf")) {
+            return "application/pdf";
+        }
+        if (lower.endsWith(".doc")) {
+            return "application/msword";
+        }
+        if (lower.endsWith(".docx")) {
+            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        }
+        return "application/octet-stream";
+    }
+
+    private String detectResourceTypeByNameOrMime(String fileName, String mime) {
+        String lower = fileName != null ? fileName.toLowerCase(Locale.ROOT) : "";
+        String mimeLower = mime != null ? mime.toLowerCase(Locale.ROOT) : "";
+        if (lower.endsWith(".pdf") || mimeLower.contains("pdf")) {
+            return "PDF";
+        }
+        return "DOCUMENT";
     }
 
     @PostMapping("/delete-path")
@@ -1234,20 +1332,20 @@ public class UserController {
     public String resources(HttpSession session) {
         String r = checkAccess(session);
         if (r != null) return r;
-        return "user/user_resources";
+        return "redirect:/student/resources";
     }
 
     @GetMapping("/about")
     public String about(HttpSession session) {
         String r = checkAccess(session);
         if (r != null) return r;
-        return "user/user_about";
+        return "redirect:/student/about";
     }
 
     @GetMapping("/contact")
     public String contact(HttpSession session) {
         String r = checkAccess(session);
         if (r != null) return r;
-        return "user/user_contact";
+        return "redirect:/student/contact";
     }
 }

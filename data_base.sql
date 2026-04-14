@@ -1,3 +1,4 @@
+version: '1.0'
 -- ============================================================
 -- PathPilot Database Schema
 -- Database: pathpilots_db
@@ -259,6 +260,27 @@ CREATE TABLE IF NOT EXISTS user_activity_log (
 CREATE INDEX idx_enrollment_path ON enrollments(path_id);
 CREATE INDEX idx_quiz_response_question ON quiz_responses(question_id);
 CREATE INDEX idx_phase_resource_upload ON phase_resources(uploaded_by);
+
+-- ============================================================
+-- UPLOAD PATH MIGRATION (OLD /uploads -> /assets/uploads)
+-- Run safely on existing databases after deployment.
+-- ============================================================
+
+-- Ensure users profile picture column exists for profile uploads.
+ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS profile_pic VARCHAR(500) DEFAULT NULL;
+
+-- Normalize old file paths in phase resources.
+UPDATE phase_resources
+SET file_path = REPLACE(file_path, '/uploads/', '/assets/uploads/')
+WHERE file_path IS NOT NULL
+    AND file_path LIKE '/uploads/%';
+
+-- Normalize old profile picture paths.
+UPDATE users
+SET profile_pic = REPLACE(profile_pic, '/uploads/', '/assets/uploads/')
+WHERE profile_pic IS NOT NULL
+    AND profile_pic LIKE '/uploads/%';
 
 -- ============================================================
 -- SAMPLE DATA (Optional - Comment out if not needed)

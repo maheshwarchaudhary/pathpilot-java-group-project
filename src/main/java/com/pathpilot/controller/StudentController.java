@@ -9,6 +9,7 @@ import com.pathpilot.dao.QuizOptionDAO;
 import com.pathpilot.dao.PhaseProgressDAO;
 import com.pathpilot.dao.PhaseResourceDAO;
 import com.pathpilot.dao.QuizResponseDAO;
+import com.pathpilot.dao.UserStatisticsDAO;
 import com.pathpilot.model.CareerPath;
 import com.pathpilot.model.Phase;
 import com.pathpilot.model.Enrollment;
@@ -28,11 +29,12 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import org.springframework.web.multipart.MultipartFile;
 import jakarta.servlet.http.HttpSession;
-import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -69,6 +71,9 @@ public class StudentController {
 
     @Autowired
     private QuizResponseDAO quizResponseDAO;
+
+    @Autowired
+    private UserStatisticsDAO userStatisticsDAO;
 
     @Autowired
     private EmailService emailService;
@@ -289,11 +294,9 @@ public class StudentController {
             List<Map<String, Object>> enrollments = enrollmentDAO.getAllEnrollmentDetailsForUser(userId);
             for (Map<String, Object> enrollment : enrollments) {
                 if (((Number) enrollment.get("path_id")).intValue() == pathId) {
-                    // Redirect to progress page with enrollment ID and path title
+                    // Redirect to progress page with enrollment ID
                     int enrollmentId = ((Number) enrollment.get("enrollment_id")).intValue();
-                    String title = (String) enrollment.get("path_title");
-                    return "redirect:/student/progress?enrollmentId=" + enrollmentId + "&title=" + 
-                           URLEncoder.encode(title, StandardCharsets.UTF_8);
+                    return "redirect:/student/progress?enrollmentId=" + enrollmentId;
                 }
             }
         }
@@ -371,19 +374,51 @@ public class StudentController {
 
     @GetMapping("/module")
     public String moduleContent(
-            @RequestParam("phase") int phaseId,
+            @RequestParam(value = "phaseId", required = false) Integer phaseId,
+            @RequestParam(value = "phase", required = false) String legacyPhase,
             @RequestParam(value = "title", required = false) String title,
             @RequestParam(value = "path", required = false) Integer pathId,
+            @RequestParam(value = "enrollmentId", required = false) Integer enrollmentId,
             Model model,
             HttpSession session) {
         String r = checkAccess(session);
         if (r != null) return r;
 
         int studentId = (Integer) session.getAttribute("userId");
+
+        Integer resolvedPhaseId = phaseId;
+        if (resolvedPhaseId == null && legacyPhase != null && !legacyPhase.trim().isEmpty()) {
+            resolvedPhaseId = resolvePhaseIdFromLegacy(legacyPhase, pathId, title, studentId);
+            if (resolvedPhaseId != null) {
+                String redirectUrl = "redirect:/student/module?phaseId=" + resolvedPhaseId;
+                if (pathId != null) {
+                    redirectUrl += "&path=" + pathId;
+                }
+                if (enrollmentId != null) {
+                    redirectUrl += "&enrollmentId=" + enrollmentId;
+                }
+                return redirectUrl;
+            }
+        }
+
+        if (resolvedPhaseId == null || resolvedPhaseId <= 0) {
+            return "redirect:/student/progress?error=missing_phase";
+        }
         
-        Phase phase = phaseDAO.getPhaseById(phaseId);
+        Phase phase = phaseDAO.getPhaseById(resolvedPhaseId);
         if (phase == null) {
             return "redirect:/student/progress?error=phase_not_found";
+        }
+
+        if (pathId == null) {
+            pathId = phase.getPathId();
+        }
+
+        if (enrollmentId == null || enrollmentId <= 0) {
+            Enrollment enrollment = enrollmentDAO.getEnrollmentByUserAndPath(studentId, pathId);
+            if (enrollment != null) {
+                enrollmentId = enrollment.getEnrollmentId();
+            }
         }
 
         String resolvedTitle = (title != null && !title.trim().isEmpty()) ? title : phase.getTitle();
@@ -392,7 +427,7 @@ public class StudentController {
         String pdfName = "";
 
         // Get resources for this phase
-        List<PhaseResource> resources = phaseResourceDAO.getResourcesByPhaseId(phaseId);
+        List<PhaseResource> resources = phaseResourceDAO.getResourcesByPhaseId(resolvedPhaseId);
         for (PhaseResource resource : resources) {
             if (videoUrl.isEmpty() && "VIDEO".equalsIgnoreCase(resource.getResourceType()) && resource.getResourceUrl() != null) {
                 videoUrl = resource.getResourceUrl();
@@ -405,18 +440,88 @@ public class StudentController {
         }
 
         model.addAttribute("phaseObj", phase);
+        model.addAttribute("phaseId", resolvedPhaseId);
         model.addAttribute("title", resolvedTitle);
         model.addAttribute("pathId", pathId);
+        model.addAttribute("enrollmentId", enrollmentId);
         model.addAttribute("videoUrl", videoUrl);
         model.addAttribute("pdfPath", pdfPath);
         model.addAttribute("pdfName", pdfName);
         return "students/student_module";
+    }
+
+    private Integer resolvePhaseIdFromLegacy(String legacyPhase, Integer pathId, String title, int studentId) {
+        Integer parsedId = parsePositiveInt(legacyPhase);
+        if (parsedId != null && phaseDAO.getPhaseById(parsedId) != null) {
+            return parsedId;
+        }
+
+        Integer phaseNumber = extractPhaseNumber(legacyPhase);
+        if (phaseNumber == null) {
+            return null;
+        }
+
+        Integer resolvedPathId = pathId;
+        if (resolvedPathId == null && title != null && !title.trim().isEmpty()) {
+            List<Map<String, Object>> enrollmentDetails = enrollmentDAO.getAllEnrollmentDetailsForUser(studentId);
+            for (Map<String, Object> detail : enrollmentDetails) {
+                Object dbTitle = detail.get("path_title");
+                Object dbPathId = detail.get("path_id");
+                if (dbTitle != null && dbPathId != null && title.trim().equalsIgnoreCase(dbTitle.toString().trim())) {
+                    resolvedPathId = ((Number) dbPathId).intValue();
+                    break;
+                }
+            }
+        }
+
+        if (resolvedPathId == null) {
+            List<Enrollment> enrollments = enrollmentDAO.getEnrollmentsByUserId(studentId);
+            if (enrollments.size() == 1) {
+                resolvedPathId = enrollments.get(0).getPathId();
+            }
+        }
+
+        if (resolvedPathId == null) {
+            return null;
+        }
+
+        Phase phase = phaseDAO.getPhaseByPathIdAndNumber(resolvedPathId, phaseNumber);
+        return phase != null ? phase.getPhaseId() : null;
+    }
+
+    private Integer parsePositiveInt(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            int parsed = Integer.parseInt(value.trim());
+            return parsed > 0 ? parsed : null;
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private Integer extractPhaseNumber(String value) {
+        if (value == null) {
+            return null;
+        }
+        String digits = value.replaceAll("\\\\D+", "");
+        if (digits.isEmpty()) {
+            return null;
+        }
+        try {
+            int parsed = Integer.parseInt(digits);
+            return parsed > 0 ? parsed : null;
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
     
     @GetMapping("/quiz")
     public String showQuiz(
             @RequestParam(value = "path", required = false) Integer pathId,
             @RequestParam(value = "phase", required = false) Integer phaseId,
+            @RequestParam(value = "enrollmentId", required = false) Integer enrollmentId,
             @RequestParam(value = "title", required = false) String title,
             Model model,
             HttpSession session) {
@@ -424,7 +529,11 @@ public class StudentController {
         if (r != null) return r;
 
         if (phaseId != null && phaseId > 0) {
-            return "redirect:/student/quiz/" + phaseId;
+            String redirect = "redirect:/student/quiz/" + phaseId;
+            if (enrollmentId != null && enrollmentId > 0) {
+                redirect += "?enrollmentId=" + enrollmentId;
+            }
+            return redirect;
         }
 
         Integer userId = (Integer) session.getAttribute("userId");
@@ -457,6 +566,7 @@ public class StudentController {
             model.addAttribute("questions", questions);
             model.addAttribute("phase", phase);
             model.addAttribute("phaseId", phaseId);
+            model.addAttribute("enrollmentId", enrollmentId);
             model.addAttribute("title", phase != null ? phase.getTitle() : (title != null ? title : "Assessment"));
             model.addAttribute("viewMode", "quiz");
         }
@@ -477,6 +587,7 @@ public class StudentController {
     @GetMapping("/quiz/{phaseId}")
     public String showQuizByPhaseId(
             @PathVariable("phaseId") int phaseId,
+            @RequestParam(value = "enrollmentId", required = false) Integer enrollmentId,
             Model model,
             HttpSession session) {
         String r = checkAccess(session);
@@ -488,8 +599,13 @@ public class StudentController {
             return "redirect:/student/resources";
         }
 
-        if (userId == null || enrollmentDAO.getEnrollmentByUserAndPath(userId, phase.getPathId()) == null) {
+        Enrollment enrollment = userId != null ? enrollmentDAO.getEnrollmentByUserAndPath(userId, phase.getPathId()) : null;
+        if (enrollment == null) {
             return "redirect:/student/course-details/" + phase.getPathId() + "?error=enroll_required";
+        }
+
+        if (enrollmentId == null || enrollmentId <= 0 || enrollmentId != enrollment.getEnrollmentId()) {
+            enrollmentId = enrollment.getEnrollmentId();
         }
 
         List<QuizQuestion> questions = quizQuestionDAO.getQuestionsByPhaseId(phaseId);
@@ -501,6 +617,7 @@ public class StudentController {
         model.addAttribute("questions", questions);
         model.addAttribute("phase", phase);
         model.addAttribute("phaseId", phaseId);
+        model.addAttribute("enrollmentId", enrollmentId);
         model.addAttribute("title", phase.getTitle());
         model.addAttribute("viewMode", "quiz");
         return "students/student_quiz";
@@ -508,38 +625,51 @@ public class StudentController {
 
 
     @GetMapping("/progress")
-    public String viewProgress(Model model, HttpSession session) {
+    public String viewProgress(
+            @RequestParam(value = "enrollmentId", required = false) Integer enrollmentId,
+            Model model,
+            HttpSession session) {
         String r = checkAccess(session);
         if (r != null) return r;
         
         try {
             int userId = (Integer) session.getAttribute("userId");
-            
-            // Fetch student's enrollments
-            List<Enrollment> enrollments = enrollmentDAO.getEnrollmentsByUserId(userId);
-            
-            // Fetch path details for each enrollment
-            java.util.List<java.util.Map<String, Object>> enrolledPaths = new java.util.ArrayList<>();
-            if (enrollments != null) {
-                for (Enrollment enrollment : enrollments) {
-                    CareerPath path = pathDAO.getPathById(enrollment.getPathId());
-                    if (path != null) {
-                        java.util.Map<String, Object> pathData = new java.util.HashMap<>();
-                        pathData.put("enrollment", enrollment);
-                        pathData.put("path", path);
-                        pathData.put("phases", phaseDAO.getPhasesByPathId(enrollment.getPathId()));
-                        enrolledPaths.add(pathData);
-                    }
+
+            if (enrollmentId == null || enrollmentId <= 0) {
+                List<Enrollment> enrollments = enrollmentDAO.getEnrollmentsByUserId(userId);
+                if (enrollments == null || enrollments.isEmpty()) {
+                    return "redirect:/student/resources?error=no_enrollments";
                 }
+                return "redirect:/student/progress?enrollmentId=" + enrollments.get(0).getEnrollmentId();
             }
-            
-            System.out.println("📚 Loaded " + enrolledPaths.size() + " enrolled courses for user " + userId);
-            model.addAttribute("enrolledPaths", enrolledPaths);
+
+            Enrollment enrollment = enrollmentDAO.getEnrollmentById(enrollmentId);
+            if (enrollment == null || enrollment.getUserId() != userId) {
+                return "redirect:/student/resources?error=invalid_enrollment";
+            }
+
+            CareerPath careerPath = pathDAO.getPathById(enrollment.getPathId());
+            if (careerPath == null) {
+                return "redirect:/student/resources?error=path_not_found";
+            }
+
+            List<Phase> phasesList = phaseDAO.getPhasesByPathId(careerPath.getPathId());
+            List<Map<String, Object>> phaseProgressList = phaseProgressDAO.getPhaseProgressByPathId(careerPath.getPathId(), enrollmentId);
+            Map<String, Object> userStats = userStatisticsDAO.getUserStatistics(userId, enrollmentId);
+
+            model.addAttribute("enrollmentId", enrollmentId);
+            model.addAttribute("careerPath", careerPath);
+            model.addAttribute("phasesList", phasesList);
+            model.addAttribute("phaseProgressList", phaseProgressList);
+            model.addAttribute("userStats", userStats);
             
         } catch (Exception e) {
             System.err.println("Error loading progress: " + e.getMessage());
             e.printStackTrace();
-            model.addAttribute("enrolledPaths", new java.util.ArrayList<>());
+            model.addAttribute("careerPath", null);
+            model.addAttribute("phasesList", new ArrayList<>());
+            model.addAttribute("phaseProgressList", new ArrayList<>());
+            model.addAttribute("userStats", new HashMap<String, Object>());
         }
         
         return "students/student_progress";
@@ -777,18 +907,20 @@ public class StudentController {
             }
         }
 
-        // 2. 📂 FILE UPLOAD (Drive D:\)
+        // 2. 📂 FILE UPLOAD
         if (file != null && !file.isEmpty()) {
             try {
-                String uploadDir = "D:/pathpilot/uploads/";
-                File dir = new File(uploadDir);
-                if (!dir.exists()) dir.mkdirs(); 
+                Path uploadRoot = resolveUploadRoot();
+                String originalName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "profile.jpg";
+                String safeName = originalName.replaceAll("[^a-zA-Z0-9._-]", "_");
+                String fileName = "profile_" + userId + "_" + System.currentTimeMillis() + "_" + safeName;
+                Path target = uploadRoot.resolve(fileName);
 
-                String fileName = "profile_" + userId + "_" + System.currentTimeMillis() + ".jpg";
-                File dest = new File(dir.getAbsolutePath() + File.separator + fileName);
-                
-                file.transferTo(dest);
-                currentProfilePic = "/uploads/" + fileName; 
+                Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+                currentProfilePic = "/assets/uploads/" + fileName;
+
+                System.out.println("[UPLOAD][STUDENT][PROFILE] saved=" + target.toAbsolutePath());
+                System.out.println("[UPLOAD][STUDENT][PROFILE] exists=" + Files.exists(target) + " size=" + Files.size(target));
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -807,6 +939,30 @@ public class StudentController {
         return "redirect:/student/profile?error=server_error";
     }
 
+    private Path resolveUploadRoot() throws IOException {
+        List<Path> candidates = List.of(
+                Paths.get("D:/RGM/pathpilot/src/main/webapp/assets/uploads"),
+                Paths.get(System.getProperty("user.dir"), "src", "main", "webapp", "assets", "uploads").toAbsolutePath().normalize()
+        );
+
+        IOException last = null;
+        for (Path candidate : candidates) {
+            try {
+                Files.createDirectories(candidate);
+                if (Files.isDirectory(candidate) && Files.isWritable(candidate)) {
+                    return candidate;
+                }
+            } catch (IOException ex) {
+                last = ex;
+            }
+        }
+
+        if (last != null) {
+            throw last;
+        }
+        throw new IOException("No writable upload directory available at project assets/uploads");
+    }
+
     @PostMapping("/update-progress")
     public String handleProgressUpdate(@RequestParam String roadmapId, HttpSession session) {
         String r = checkAccess(session);
@@ -814,7 +970,7 @@ public class StudentController {
         return "redirect:/student/progress?status=updated";
     }
 
-    @PostMapping("/quiz/submit")
+    @PostMapping(value = "/quiz/submit", consumes = "application/json", produces = "application/json")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> submitQuizResult(
             @RequestBody Map<String, Object> payload,
@@ -873,27 +1029,10 @@ public class StudentController {
             int totalQuestions = questions.size();
             for (QuizQuestion question : questions) {
                 Integer selectedIndex = submittedAnswers.get(question.getQuestionId());
-                if (selectedIndex == null) {
+                if (selectedIndex == null || selectedIndex < 0 || selectedIndex > 3) {
                     continue;
                 }
-                String correctAnswer = question.getCorrectAnswer() != null ? question.getCorrectAnswer().trim().toUpperCase() : "";
-                int correctIndex;
-                switch (correctAnswer) {
-                    case "A":
-                        correctIndex = 0;
-                        break;
-                    case "B":
-                        correctIndex = 1;
-                        break;
-                    case "C":
-                        correctIndex = 2;
-                        break;
-                    case "D":
-                        correctIndex = 3;
-                        break;
-                    default:
-                        correctIndex = -1;
-                }
+                int correctIndex = answerToIndex(question.getCorrectAnswer());
                 if (selectedIndex == correctIndex) {
                     score++;
                 }
@@ -921,61 +1060,45 @@ public class StudentController {
                 );
 
             PhaseProgress savedProgress = phaseProgressDAO.getProgressByEnrollmentAndPhase(enrollment.getEnrollmentId(), phaseId);
-            if (savedProgress != null) {
-                int progressId = savedProgress.getProgressId();
-                quizResponseDAO.deleteResponsesByPhaseProgressId(progressId);
+            if (savedProgress == null) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(java.util.Map.of("error", "PHASE_PROGRESS_NOT_FOUND"));
+            }
 
-                for (QuizQuestion question : questions) {
-                    Integer selectedIndex = submittedAnswers.get(question.getQuestionId());
-                    String correctAnswer = question.getCorrectAnswer() != null ? question.getCorrectAnswer().trim().toUpperCase() : "";
+            int progressId = savedProgress.getProgressId();
+            quizResponseDAO.deleteResponsesByPhaseProgressId(progressId);
 
-                    int correctIndex;
-                    switch (correctAnswer) {
-                        case "A":
-                            correctIndex = 0;
-                            break;
-                        case "B":
-                            correctIndex = 1;
-                            break;
-                        case "C":
-                            correctIndex = 2;
-                            break;
-                        case "D":
-                            correctIndex = 3;
-                            break;
-                        default:
-                            correctIndex = -1;
-                    }
-
-                    String selectedAnswer = null;
-                    if (selectedIndex != null) {
-                        switch (selectedIndex) {
-                            case 0:
-                                selectedAnswer = "A";
-                                break;
-                            case 1:
-                                selectedAnswer = "B";
-                                break;
-                            case 2:
-                                selectedAnswer = "C";
-                                break;
-                            case 3:
-                                selectedAnswer = "D";
-                                break;
-                            default:
-                                selectedAnswer = null;
-                        }
-                    }
-
-                    boolean isCorrect = selectedIndex != null && selectedIndex == correctIndex;
-
-                    QuizResponse quizResponse = new QuizResponse();
-                    quizResponse.setPhaseProgressId(progressId);
-                    quizResponse.setQuestionId(question.getQuestionId());
-                    quizResponse.setSelectedAnswer(selectedAnswer);
-                    quizResponse.setCorrect(isCorrect);
-                    quizResponseDAO.addResponse(quizResponse);
+            int storedResponses = 0;
+            for (QuizQuestion question : questions) {
+                Integer selectedIndex = submittedAnswers.get(question.getQuestionId());
+                if (selectedIndex == null || selectedIndex < 0 || selectedIndex > 3) {
+                    continue;
                 }
+                int correctIndex = answerToIndex(question.getCorrectAnswer());
+
+                String selectedAnswer = indexToAnswer(selectedIndex);
+                boolean isCorrect = selectedIndex != null && selectedIndex >= 0 && selectedIndex <= 3 && selectedIndex == correctIndex;
+
+                QuizResponse quizResponse = new QuizResponse();
+                quizResponse.setPhaseProgressId(progressId);
+                quizResponse.setQuestionId(question.getQuestionId());
+                quizResponse.setSelectedAnswer(selectedAnswer);
+                quizResponse.setCorrect(isCorrect);
+                quizResponseDAO.addResponse(quizResponse);
+                storedResponses++;
+            }
+
+            int estimatedMinutes = Math.max(5, questions.size() * 2);
+            try {
+                userStatisticsDAO.logStudySession(
+                        enrollment.getEnrollmentId(),
+                        userId,
+                        phaseId,
+                        phase.getTitle() != null ? phase.getTitle() : "Quiz Attempt",
+                        estimatedMinutes
+                );
+            } catch (Exception statsEx) {
+                System.err.println("⚠️ Study session logging failed, but quiz result is saved: " + statsEx.getMessage());
             }
 
             BigDecimal overall = phaseProgressDAO.calculateProgressPercentage(enrollment.getEnrollmentId());
@@ -985,15 +1108,72 @@ public class StudentController {
             }
 
             java.util.Map<String, Object> response = new java.util.HashMap<>();
+            Integer nextPhaseId = findNextPhaseId(phase.getPathId(), phaseId);
             response.put("status", "QUIZ_SAVED");
             response.put("score", score);
             response.put("totalQuestions", totalQuestions);
             response.put("percentage", percentage);
             response.put("passed", passed);
+            response.put("storedResponses", storedResponses);
+            response.put("enrollmentId", enrollment.getEnrollmentId());
+            response.put("pathId", phase.getPathId());
+            response.put("nextPhaseId", nextPhaseId);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(java.util.Map.of("error", "ERROR_SAVING_QUIZ"));
+            java.util.Map<String, Object> errorResponse = new java.util.HashMap<>();
+            errorResponse.put("error", "ERROR_SAVING_QUIZ");
+            errorResponse.put("message", e.getMessage() != null ? e.getMessage() : "Unexpected error");
+            errorResponse.put("exception", e.getClass().getSimpleName());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
+    }
+
+    private int answerToIndex(String answer) {
+        if (answer == null) return -1;
+        switch (answer.trim().toUpperCase()) {
+            case "A":
+                return 0;
+            case "B":
+                return 1;
+            case "C":
+                return 2;
+            case "D":
+                return 3;
+            default:
+                return -1;
+        }
+    }
+
+    private String indexToAnswer(Integer index) {
+        if (index == null) return null;
+        switch (index) {
+            case 0:
+                return "A";
+            case 1:
+                return "B";
+            case 2:
+                return "C";
+            case 3:
+                return "D";
+            default:
+                return null;
+        }
+    }
+
+    private Integer findNextPhaseId(int pathId, int currentPhaseId) {
+        List<Phase> phases = phaseDAO.getPhasesByPathId(pathId);
+        if (phases == null || phases.isEmpty()) {
+            return null;
+        }
+        for (int index = 0; index < phases.size(); index++) {
+            if (phases.get(index).getPhaseId() == currentPhaseId) {
+                if (index + 1 < phases.size()) {
+                    return phases.get(index + 1).getPhaseId();
+                }
+                return null;
+            }
+        }
+        return null;
     }
 }

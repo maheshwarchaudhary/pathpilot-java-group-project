@@ -308,8 +308,10 @@
                 // Validate file type
                 const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
                 const maxSize = 50 * 1024 * 1024; // 50MB
+                const allowedByMime = allowedTypes.includes(file.type) || file.type === '' || file.type === 'application/octet-stream';
+                const allowedByExtension = /\.(pdf|doc|docx)$/i.test(file.name || '');
 
-                if (!allowedTypes.includes(file.type)) {
+                if (!(allowedByMime && allowedByExtension)) {
                     alert('Only PDF and DOC/DOCX files are allowed');
                     this.value = '';
                     content.classList.remove('hidden');
@@ -623,6 +625,7 @@
     }
 
     async function uploadPhaseFiles(pathId, files) {
+        console.log('[UPLOAD][CREATE] pathId:', pathId, 'files:', files.map(f => ({ phaseNumber: f.phaseNumber, name: f.file ? f.file.name : '' })));
         for (const item of files) {
             const data = new FormData();
             data.append('pathId', pathId);
@@ -635,8 +638,9 @@
             });
 
             const uploadText = (await uploadResp.text()).trim();
+            console.log('[UPLOAD][CREATE] phase', item.phaseNumber, 'status', uploadResp.status, 'response', uploadText);
             if (!uploadResp.ok) {
-                throw new Error(uploadText || `Failed to upload file for phase ${item.phaseNumber}`);
+                throw new Error((uploadText || `Failed to upload file for phase ${item.phaseNumber}`) + ` (HTTP ${uploadResp.status})`);
             }
         }
     }
@@ -679,6 +683,7 @@
 
         const payload = buildSubmissionParams(form);
         const selectedFiles = getSelectedPhaseFiles(form);
+        console.log('[UPLOAD][CREATE] selectedFiles.count=', selectedFiles.length);
 
         fetch(form.action, {
             method: "POST",

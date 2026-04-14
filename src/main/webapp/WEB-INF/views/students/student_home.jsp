@@ -45,7 +45,7 @@
 
 <body class="bg-[#f8f9fc] antialiased">
 
-<jsp:include page="/WEB-INF/views/components/student_navbar.jsp"/>
+<jsp:include page="/WEB-INF/views/components/user_navbar.jsp"/>
 
 <section class="hero-gradient text-white py-24 px-4 text-center">
     <span class="bg-white/20 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest">

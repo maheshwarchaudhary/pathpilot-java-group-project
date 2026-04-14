@@ -49,7 +49,7 @@
 </head>
 <body class="bg-[#f8f9fc] antialiased">
 
-    <jsp:include page="/WEB-INF/views/components/student_navbar.jsp"/>
+    <jsp:include page="/WEB-INF/views/components/user_navbar.jsp"/>
 
     <header class="max-w-7xl mx-auto px-6 pt-16 pb-8">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">

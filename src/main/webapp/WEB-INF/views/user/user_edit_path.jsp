@@ -641,9 +641,14 @@
         const phaseCards = form.querySelectorAll('.phase-card');
         phaseCards.forEach((card, index) => {
             const fileInput = card.querySelector('input[type="file"].file-input');
+            const phaseIdInput = card.querySelector('input[name="phaseIds[]"]');
+            const parsedPhaseId = phaseIdInput && phaseIdInput.value && phaseIdInput.value.trim()
+                ? parseInt(phaseIdInput.value.trim(), 10)
+                : 0;
             if (fileInput && fileInput.files && fileInput.files.length > 0 && fileInput.files[0]) {
                 files.push({
                     phaseNumber: index + 1,
+                    phaseId: Number.isInteger(parsedPhaseId) && parsedPhaseId > 0 ? parsedPhaseId : null,
                     card,
                     file: fileInput.files[0]
                 });
@@ -653,18 +658,23 @@
     }
 
     async function uploadPhaseFiles(pathId, files) {
+        console.log('[UPLOAD][EDIT] pathId:', pathId, 'files:', files.map(f => ({ phaseNumber: f.phaseNumber, phaseId: f.phaseId, name: f.file ? f.file.name : '' })));
         for (const item of files) {
             const fd = new FormData();
             fd.append('pathId', pathId);
             fd.append('phaseNumber', item.phaseNumber);
+            if (item.phaseId) {
+                fd.append('phaseId', item.phaseId);
+            }
             fd.append('attachment', item.file);
 
-            const response = await fetch("<%=request.getContextPath()%>/user/create-path/upload-phase-file", {
+            const response = await fetch("<%=request.getContextPath()%>/user/edit-path/upload-phase-file", {
                 method: 'POST',
                 body: fd
             });
 
             const responseText = (await response.text()).trim();
+            console.log('[UPLOAD][EDIT] phase', item.phaseNumber, 'status', response.status, 'response', responseText);
             if (!response.ok) {
                 throw new Error(responseText || `Failed to upload file for phase ${item.phaseNumber}`);
             }
@@ -704,8 +714,10 @@
             if (file) {
                 const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
                 const maxSize = 50 * 1024 * 1024;
+                const allowedByMime = allowedTypes.includes(file.type) || file.type === '' || file.type === 'application/octet-stream';
+                const allowedByExtension = /\.(pdf|doc|docx)$/i.test(file.name || '');
 
-                if (!allowedTypes.includes(file.type)) {
+                if (!(allowedByMime && allowedByExtension)) {
                     alert('Only PDF and DOC/DOCX files are allowed');
                     this.value = '';
                     if (content) content.classList.remove('hidden');
@@ -787,6 +799,7 @@
 
         const payload = buildSubmissionParams(form);
         const selectedFiles = getSelectedPhaseFiles(form);
+        console.log('[UPLOAD][EDIT] selectedFiles.count=', selectedFiles.length);
 
         const debugQuizKeys = [];
         payload.forEach((value, key) => {

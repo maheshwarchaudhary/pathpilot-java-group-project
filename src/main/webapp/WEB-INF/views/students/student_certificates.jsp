@@ -58,7 +58,7 @@
 
 <body class="bg-bg-main min-h-screen flex antialiased">
 
-    <jsp:include page="/WEB-INF/views/components/student_sidebar.jsp"/>
+    <jsp:include page="/WEB-INF/views/components/user_sidebar.jsp"/>
 
     <main class="flex-grow p-8 lg:p-12">
         

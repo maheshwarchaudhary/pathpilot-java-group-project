@@ -28,9 +28,9 @@ public class AppInitializer extends AbstractAnnotationConfigDispatcherServletIni
     
     @Override
     protected void customizeRegistration(ServletRegistration.Dynamic registration) {
-        
-        // CRITICAL: Location should NOT be null. Specified D:/temp for stability.
-        String uploadTempLocation = "D:/temp";
+        String uploadTempLocation = java.nio.file.Paths
+            .get(System.getProperty("user.dir"), "tmp", "multipart")
+            .toString();
         
         // Ensure the directory exists to avoid "Directory not found" error during startup
         java.io.File uploadDir = new java.io.File(uploadTempLocation);
