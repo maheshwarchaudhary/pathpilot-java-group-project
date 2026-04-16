@@ -7,7 +7,6 @@
     response.setHeader("Pragma", "no-cache");
     response.setDateHeader("Expires", 0);
 
-    // 🔐 ADMIN SESSION CHECK (IMPORTANT)
     if(session == null || session.getAttribute("role") == null || 
        !"ADMIN".equals(session.getAttribute("role"))){
 

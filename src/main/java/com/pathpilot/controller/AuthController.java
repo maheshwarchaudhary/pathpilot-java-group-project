@@ -176,7 +176,6 @@ public class AuthController {
             if ("ADMIN".equals(role)) return "/admin/dashboard";
             if ("USER".equals(role)) return "/user/UserHome";
             return "/student/home";
-
         } catch (Exception e) {
             return "ERROR";
         }

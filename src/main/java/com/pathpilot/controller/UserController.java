@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.Arrays;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import jakarta.servlet.http.HttpServletRequest;
@@ -789,7 +790,7 @@ public class UserController {
     @PostMapping({"/create-path/upload-phase-file", "/edit-path/upload-phase-file"})
     @ResponseBody
     public ResponseEntity<String> uploadPhaseFile(
-            @RequestParam(value = "pathId", required = false) String rawPathId,
+            @RequestParam("pathId") int pathId,
             @RequestParam(value = "phaseNumber", required = false) Integer phaseNumber,
             @RequestParam(value = "phaseId", required = false) Integer phaseId,
             @RequestParam("attachment") MultipartFile attachment,
@@ -804,7 +805,6 @@ public class UserController {
 
         try {
             int userId = (Integer) session.getAttribute("userId");
-            Integer pathId = tryParsePositiveInt(rawPathId);
             
             // 1. CHECK FILE
             if (attachment == null || attachment.isEmpty()) {
@@ -825,18 +825,6 @@ public class UserController {
             }
             
             // 2. CHECK PATH & PHASE
-            Phase phase = null;
-            if (phaseId != null && phaseId > 0) {
-                phase = phaseDAO.getPhaseById(phaseId);
-                if (phase != null && pathId == null) {
-                    pathId = phase.getPathId();
-                }
-            }
-
-            if (pathId == null || pathId <= 0) {
-                return ResponseEntity.badRequest().body("Invalid pathId");
-            }
-
             CareerPath path = pathDAO.getPathById(pathId);
             if (path == null) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Path not found");
@@ -846,11 +834,8 @@ public class UserController {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Not authorized");
             }
             
-            if (phase != null && phase.getPathId() != pathId) {
-                phase = null;
-            }
-
-            if (phase == null && phaseId != null && phaseId > 0) {
+            Phase phase = null;
+            if (phaseId != null && phaseId > 0) {
                 Phase byId = phaseDAO.getPhaseById(phaseId);
                 if (byId != null && byId.getPathId() == pathId) {
                     phase = byId;
@@ -925,16 +910,10 @@ public class UserController {
     }
 
     private Path resolveUploadRoot() throws IOException {
-        List<Path> candidates = new ArrayList<>();
-
-        String configuredUploadDir = System.getProperty("pathpilot.upload.dir");
-        if (configuredUploadDir != null && !configuredUploadDir.trim().isEmpty()) {
-            candidates.add(Paths.get(configuredUploadDir.trim()).toAbsolutePath().normalize());
-        }
-
-        candidates.add(Paths.get(System.getProperty("user.dir"), "src", "main", "webapp", "assets", "uploads").toAbsolutePath().normalize());
-        candidates.add(Paths.get("src", "main", "webapp", "assets", "uploads").toAbsolutePath().normalize());
-        candidates.add(Paths.get("D:/RGM/pathpilot/src/main/webapp/assets/uploads"));
+        java.util.List<Path> candidates = Arrays.asList(
+                Paths.get("D:/RGM/pathpilot/src/main/webapp/assets/uploads"),
+                Paths.get(System.getProperty("user.dir"), "src", "main", "webapp", "assets", "uploads").toAbsolutePath().normalize()
+        );
 
         IOException last = null;
         for (Path candidate : candidates) {
@@ -974,22 +953,6 @@ public class UserController {
             return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
         }
         return "application/octet-stream";
-    }
-
-    private Integer tryParsePositiveInt(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        if (trimmed.isEmpty() || "null".equalsIgnoreCase(trimmed)) {
-            return null;
-        }
-        try {
-            int parsed = Integer.parseInt(trimmed);
-            return parsed > 0 ? parsed : null;
-        } catch (NumberFormatException ex) {
-            return null;
-        }
     }
 
     private String detectResourceTypeByNameOrMime(String fileName, String mime) {

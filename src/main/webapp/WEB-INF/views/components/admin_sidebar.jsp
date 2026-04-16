@@ -38,6 +38,20 @@
                 <span class="hidden lg:block whitespace-nowrap">Career Paths</span>
             </a>
 
+            <a href="<%=request.getContextPath()%>/admin/create-path" title="Create New Path"
+               class="flex items-center gap-4 px-3 py-3 rounded-2xl font-semibold transition
+               <%= currentUri.equals("/admin/create-path") ? "bg-indigo-50 text-indigo-600" : "text-gray-500 hover:bg-gray-50 hover:text-indigo-600" %>">
+                <span class="material-icons-round text-2xl flex-shrink-0">add_circle</span>
+                <span class="hidden lg:block whitespace-nowrap">Create Path</span>
+            </a>
+
+            <a href="<%=request.getContextPath()%>/admin/edit-path" title="Edit Path"
+               class="flex items-center gap-4 px-3 py-3 rounded-2xl font-semibold transition
+               <%= currentUri.equals("/admin/edit-path") ? "bg-indigo-50 text-indigo-600" : "text-gray-500 hover:bg-gray-50 hover:text-indigo-600" %>">
+                <span class="material-icons-round text-2xl flex-shrink-0">edit</span>
+                <span class="hidden lg:block whitespace-nowrap">Edit Path</span>
+            </a>
+
             <a href="<%=request.getContextPath()%>/admin/settings" title="System Settings"
                class="flex items-center gap-4 px-3 py-3 rounded-2xl font-semibold transition
                <%= currentUri.contains("settings") ? "bg-indigo-50 text-indigo-600" : "text-gray-500 hover:bg-gray-50 hover:text-indigo-600" %>">
