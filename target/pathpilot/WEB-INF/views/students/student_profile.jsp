@@ -49,7 +49,7 @@
 
 <body class="bg-bg-main min-h-screen flex antialiased">
 
-<jsp:include page="/WEB-INF/views/components/user_sidebar.jsp"/>
+<jsp:include page="/WEB-INF/views/components/sidebar.jsp"/>
 
 <main class="flex-grow p-6 lg:p-10 overflow-y-auto">
 

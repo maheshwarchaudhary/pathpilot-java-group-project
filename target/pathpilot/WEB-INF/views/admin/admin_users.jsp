@@ -61,7 +61,7 @@
 <body class="bg-bg-light antialiased overflow-hidden">
     <div class="flex h-screen">
         <!-- ✅ SIDEBAR -->
-        <jsp:include page="/WEB-INF/views/components/admin_sidebar.jsp" />
+        <jsp:include page="/WEB-INF/views/components/sidebar.jsp" />
 
         <div class="flex-1 flex flex-col overflow-hidden">
             <!-- ✅ HEADER -->
@@ -96,37 +96,12 @@
                                 <th class="px-8 py-6 text-center text-[10px] font-black uppercase tracking-widest">Actions</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-50">
-                            <tr class="hover:bg-gray-50/50 transition-colors">
-                                <td class="px-8 py-6 flex items-center gap-4">
-                                    <div class="w-12 h-12 rounded-2xl bg-indigo-100 text-primary flex items-center justify-center font-bold">RS</div>
-                                    <div>
-                                        <p class="font-800 text-gray-900">Rahul Sharma</p>
-                                        <p class="text-[10px] text-primary font-black uppercase tracking-widest">PP101 • rahul@gmail.com</p>
-                                    </div>
-                                </td>
-                                <td class="px-8 py-6">
-                                    <span class="px-3 py-1 bg-indigo-50 text-primary rounded-lg text-[9px] font-black uppercase tracking-widest w-fit">student</span>
-                                </td>
-                                <td class="px-8 py-6">
-                                    <div class="flex items-center gap-2">
-                                        <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                                        <span class="text-[10px] font-black uppercase tracking-widest text-green-600">Active</span>
-                                    </div>
-                                </td>
-                                <td class="px-8 py-6">
-                                    <div class="flex justify-center gap-3">
-                                        <button onclick="openView('Rahul Sharma','rahul@gmail.com','student','Active','PP101', 'MERN Stack', '+91 9876543210')" 
-                                                class="action-btn bg-blue-50 text-blue-600 hover:bg-blue-100">
-                                            <span class="material-icons-round text-lg">visibility</span>
-                                        </button>
-                                        <button onclick="openEdit('Rahul Sharma','rahul@gmail.com','student','Active','+91 9876543210')" 
-                                                class="action-btn bg-indigo-50 text-primary hover:bg-indigo-100">
-                                            <span class="material-icons-round text-lg">edit</span>
-                                        </button>
-                                        <button class="action-btn bg-red-50 text-red-600 hover:bg-red-100">
-                                            <span class="material-icons-round text-lg">delete</span>
-                                        </button>
+                        <tbody id="usersTableBody" class="divide-y divide-gray-50">
+                            <tr>
+                                <td colspan="4" class="px-8 py-12 text-center">
+                                    <div class="flex items-center justify-center gap-3">
+                                        <div class="w-4 h-4 bg-primary rounded-full animate-bounce"></div>
+                                        <span class="text-gray-400">Loading users...</span>
                                     </div>
                                 </td>
                             </tr>
@@ -169,8 +144,8 @@
                         <label class="section-label">Assign Role</label>
                         <select id="aRole" class="modal-input cursor-pointer">
                             <option value="student">Student</option>
-                            <option value="User">User</option>
-                            <option value="Admin">Admin</option>
+                            <option value="user">User</option>
+                            <option value="admin">Admin</option>
                         </select>
                     </div>
                 </div>
@@ -191,6 +166,7 @@
             <p class="text-gray-400 text-xs font-medium mb-10">Administrative direct access to change passwords and contact numbers.</p>
             
             <form id="editForm" novalidate>
+                <input type="hidden" id="editUserId">
                 <div class="grid grid-cols-2 gap-x-6 gap-y-4">
                     <div class="col-span-2 bg-indigo-50/50 p-6 rounded-3xl border border-indigo-100 mb-2">
                         <div class="grid grid-cols-2 gap-4">
@@ -219,9 +195,9 @@
                     <div>
                         <label class="section-label">System Role</label>
                         <select id="eRole" class="modal-input cursor-pointer">
-                            <option value="student">student</option>
-                            <option value="Learner">Learner</option>
-                            <option value="Admin">Admin</option>
+                            <option value="student">Student</option>
+                            <option value="user">User</option>
+                            <option value="admin">Admin</option>
                         </select>
                     </div>
                     <div>
@@ -273,8 +249,8 @@
                         </div>
                     </div>
                     <div>
-                        <span class="section-label">Academic Path</span>
-                        <span id="vCourse" class="text-[10px] font-black text-primary px-3 py-1 bg-indigo-50 rounded-lg uppercase inline-block mt-1"></span>
+                        <span class="section-label">Account Role</span>
+                        <span id="vRole" class="text-[10px] font-black text-primary px-3 py-1 bg-indigo-50 rounded-lg uppercase inline-block mt-1"></span>
                     </div>
                 </div>
                 <button onclick="closeView()" class="w-full py-4 bg-gray-50 text-gray-400 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-gray-100 transition">Close Overlay</button>
@@ -310,29 +286,176 @@
             document.getElementById("addModal").classList.replace("flex", "hidden");
         }
 
-        function openEdit(name, email, role, status, phone) {
+        function openEdit(userId, name, email, role, status, phone) {
             resetFormErrors('editForm');
+            document.getElementById("editUserId").value = userId;
             document.getElementById("eName").value = name;
             document.getElementById("eEmail").value = email;
-            document.getElementById("eRole").value = role;
+            document.getElementById("eRole").value = role.toLowerCase();
             document.getElementById("eStatus").value = status;
-            document.getElementById("ePhone").value = phone;
+            document.getElementById("ePhone").value = phone || '';
             document.getElementById("editModal").classList.replace("hidden", "flex");
         }
         function closeEdit() {
             document.getElementById("editModal").classList.replace("flex", "hidden");
         }
 
-        function openView(name, email, role, status, id, course, phone) {
-            document.getElementById("vNameHeader").innerText = "Displaying Record for " + id;
+        function openView(name, email, role, status, id, phone) {
+            document.getElementById("vNameHeader").innerText = "ID: " + id;
             document.getElementById("vName").innerText = name;
             document.getElementById("vEmail").innerText = email;
             document.getElementById("vID").innerText = id;
-            document.getElementById("vCourse").innerText = course;
-            document.getElementById("vPhoneView").innerText = phone;
+            document.getElementById("vRole").innerText = role;
+            document.getElementById("vPhoneView").innerText = phone || 'N/A';
             document.getElementById("viewModal").classList.replace("hidden", "flex");
         }
-        function closeView() { document.getElementById("viewModal").classList.replace("flex", "hidden"); }
+        function closeView() { 
+            document.getElementById("viewModal").classList.replace("flex", "hidden"); 
+        }
+
+        // ✅ LOAD USERS ON PAGE LOAD
+        window.addEventListener('DOMContentLoaded', function() {
+            loadUsers();
+        });
+
+        // ✅ LOAD USERS FROM API
+        function loadUsers() {
+            fetch("<%=request.getContextPath()%>/admin/api/users")
+                .then(res => {
+                    console.log("📡 API Response Status:", res.status);
+                    return res.json();
+                })
+                .then(data => {
+                    console.log("📊 API Response Data:", data);
+                    if (data.success && data.data) {
+                        console.log("✅ Data received, rendering table...");
+                        renderUsersTable(data.data);
+                        attachTableEventListeners();
+                    } else {
+                        console.error("Failed to load users:", data);
+                        document.getElementById("usersTableBody").innerHTML = '<tr><td colspan="4" class="px-8 py-12 text-center text-gray-400">Failed to load users</td></tr>';
+                    }
+                })
+                .catch(err => {
+                    console.error("Error loading users:", err);
+                    document.getElementById("usersTableBody").innerHTML = '<tr><td colspan="4" class="px-8 py-12 text-center text-gray-400">Error loading users</td></tr>';
+                });
+        }
+
+        function renderUsersTable(users) {
+            const tbody = document.getElementById("usersTableBody");
+            
+            if (!Array.isArray(users) || users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="px-8 py-12 text-center text-gray-400">No users found</td></tr>';
+                return;
+            }
+
+            console.log("🎨 Rendering " + users.length + " users");
+            
+            let html = '';
+            
+            for (let idx = 0; idx < users.length; idx++) {
+                const user = users[idx];
+                console.log("  User " + idx + ":", user);
+                
+                const name = user.name ? String(user.name).trim() : 'Unknown';
+                const email = user.email ? String(user.email).trim() : 'N/A';
+                const phone = user.phone ? String(user.phone).trim() : 'N/A';
+                const role = user.role ? String(user.role).toLowerCase().trim() : 'student';
+                const id = user.id || '?';
+                const verified = user.verified === true || user.verified === 1;
+
+                const initials = name.split(' ').map(n => n.charAt(0)).join('').substring(0, 2).toUpperCase() || 'U';
+                
+                const roleClass = role === 'admin' ? 'bg-red-50 text-red-600' : 
+                                  role === 'user' ? 'bg-purple-50 text-purple-600' : 
+                                  'bg-indigo-50 text-primary';
+                const roleLabel = role === 'admin' ? 'Admin' : 
+                                  role === 'user' ? 'User' : 'Student';
+                
+                const statusClass = verified ? 'bg-green-500' : 'bg-gray-400';
+                const statusText = verified ? 'Active' : 'Inactive';
+                const pulsing = verified ? 'animate-pulse' : '';
+                const statusColor = verified ? 'text-green-600' : 'text-gray-400';
+
+                html += '<tr class="hover:bg-gray-50/50 transition-colors">';
+                html += '  <td class="px-8 py-6 flex items-center gap-4">';
+                html += '    <div class="w-12 h-12 rounded-2xl bg-indigo-100 text-primary flex items-center justify-center font-bold text-sm">' + initials + '</div>';
+                html += '    <div>';
+                html += '      <p class="font-800 text-gray-900">' + name + '</p>';
+                html += '      <p class="text-[10px] text-primary font-black uppercase tracking-widest">ID: ' + id + ' • ' + email + '</p>';
+                html += '    </div>';
+                html += '  </td>';
+                html += '  <td class="px-8 py-6">';
+                html += '    <span class="px-3 py-1 ' + roleClass + ' rounded-lg text-[9px] font-black uppercase tracking-widest w-fit">' + roleLabel + '</span>';
+                html += '  </td>';
+                html += '  <td class="px-8 py-6">';
+                html += '    <div class="flex items-center gap-2">';
+                html += '      <span class="w-2 h-2 ' + statusClass + ' rounded-full ' + pulsing + '"></span>';
+                html += '      <span class="text-[10px] font-black uppercase tracking-widest ' + statusColor + '">' + statusText + '</span>';
+                html += '    </div>';
+                html += '  </td>';
+                html += '  <td class="px-8 py-6">';
+                html += '    <div class="flex justify-center gap-3">';
+                html += '      <button class="action-btn bg-blue-50 text-blue-600 hover:bg-blue-100 btn-view" ';
+                html += '        data-id="' + id + '" data-name="' + name + '" data-email="' + email + '" ';
+                html += '        data-role="' + roleLabel + '" data-phone="' + phone + '">';
+                html += '        <span class="material-icons-round text-lg">visibility</span>';
+                html += '      </button>';
+                html += '      <button class="action-btn bg-indigo-50 text-primary hover:bg-indigo-100 btn-edit" ';
+                html += '        data-id="' + id + '" data-name="' + name + '" data-email="' + email + '" ';
+                html += '        data-role="' + role + '" data-status="' + statusText + '" data-phone="' + phone + '">';
+                html += '        <span class="material-icons-round text-lg">edit</span>';
+                html += '      </button>';
+                html += '      <button class="action-btn bg-red-50 text-red-600 hover:bg-red-100 btn-delete" ';
+                html += '        data-id="' + id + '" data-name="' + name + '">';
+                html += '        <span class="material-icons-round text-lg">delete</span>';
+                html += '      </button>';
+                html += '    </div>';
+                html += '  </td>';
+                html += '</tr>';
+            }
+            
+            tbody.innerHTML = html;
+            attachTableEventListeners();
+            console.log("✅ Table rendered successfully with " + users.length + " rows");
+        }
+
+        function attachTableEventListeners() {
+            // View button listeners
+            document.querySelectorAll('.btn-view').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const name = this.dataset.name;
+                    const email = this.dataset.email;
+                    const role = this.dataset.role;
+                    const phone = this.dataset.phone;
+                    const id = this.dataset.id;
+                    openView(name, email, role, '', id, phone);
+                });
+            });
+
+            // Edit button listeners
+            document.querySelectorAll('.btn-edit').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.id;
+                    const name = this.dataset.name;
+                    const email = this.dataset.email;
+                    const role = this.dataset.role;
+                    const status = this.dataset.status;
+                    const phone = this.dataset.phone;
+                    openEdit(id, name, email, role, status, phone);
+                });
+            });
+
+            // Delete button listeners
+            document.querySelectorAll('.btn-delete').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.id;
+                    const name = this.dataset.name;
+                    deleteUser(id, name);
+                });
+            });
+        }
 
         // ✅ FORM VALIDATION LOGIC
         function handleAddUser() {
@@ -340,37 +463,132 @@
             const email = document.getElementById("aEmail").value.trim();
             const phone = document.getElementById("aPhone").value.trim();
             const pass = document.getElementById("aPass").value.trim();
+            const role = document.getElementById("aRole").value || "student";
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             
             let isValid = true;
 
             if (name.length < 3) { showError("aName", "aNameError"); isValid = false; }
+            else { clearError("aName", "aNameError"); }
+            
             if (!emailRegex.test(email)) { showError("aEmail", "aEmailError"); isValid = false; }
+            else { clearError("aEmail", "aEmailError"); }
+            
             if (phone.length < 10) { showError("aPhone", "aPhoneError"); isValid = false; }
+            else { clearError("aPhone", "aPhoneError"); }
+            
             if (pass.length < 6) { showError("aPass", "aPassError"); isValid = false; }
+            else { clearError("aPass", "aPassError"); }
 
             if (isValid) {
-                alert("Identity generated successfully.");
-                closeAddModal();
+                // AJAX call to create user
+                const formData = new FormData();
+                formData.append("name", name);
+                formData.append("email", email);
+                formData.append("phone", phone);
+                formData.append("password", pass);
+                formData.append("role", role);
+
+                fetch("<%=request.getContextPath()%>/admin/api/users", {
+                    method: "POST",
+                    body: formData
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        showSuccessToast("User created successfully");
+                        closeAddModal();
+                        loadUsers();
+                    } else {
+                        alert("Error: " + (data.message || "Failed to create user"));
+                    }
+                })
+                .catch(err => {
+                    console.error("Error:", err);
+                    alert("Network error while creating user");
+                });
             }
         }
 
         function handleUpdate() {
+            const userId = document.getElementById("editUserId").value;
             const name = document.getElementById("eName").value.trim();
             const phone = document.getElementById("ePhone").value.trim();
             const pass = document.getElementById("ePass").value.trim();
+            const role = document.getElementById("eRole").value || "student";
+            const status = document.getElementById("eStatus").value || "Active";
             
             let isValid = true;
 
             if (name.length < 3) { showError("eName", "eNameError"); isValid = false; }
-            if (phone.length < 10) { showError("ePhone", "ePhoneError"); isValid = false; }
-            // Password in edit is only validated if the user types something (reset mode)
+            else { clearError("eName", "eNameError"); }
+            
+            // Phone is optional - only validate if provided
+            if (phone.length > 0 && phone.length < 10) { showError("ePhone", "ePhoneError"); isValid = false; }
+            else { clearError("ePhone", "ePhoneError"); }
+            
             if (pass.length > 0 && pass.length < 6) { showError("ePass", "ePassError"); isValid = false; }
+            else { clearError("ePass", "ePassError"); }
 
             if (isValid) {
-                alert("Administrative identity override successful.");
-                closeEdit();
+                // AJAX call to update user
+                const formData = new FormData();
+                formData.append("name", name);
+                formData.append("phone", phone);
+                if (pass) formData.append("password", pass);
+                formData.append("role", role);
+                formData.append("status", status);
+
+                fetch("<%=request.getContextPath()%>/admin/api/users/" + userId, {
+                    method: "PUT",
+                    body: formData
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        showSuccessToast("User updated successfully");
+                        closeEdit();
+                        loadUsers();
+                    } else {
+                        alert("Error: " + (data.message || "Failed to update user"));
+                    }
+                })
+                .catch(err => {
+                    console.error("Error:", err);
+                    alert("Network error while updating user");
+                });
             }
+        }
+
+        function deleteUser(userId, userName) {
+            if (!confirm(`Are you sure you want to delete ${userName}? This action cannot be undone.`)) {
+                return;
+            }
+
+            fetch("<%=request.getContextPath()%>/admin/api/users/" + userId, {
+                method: "DELETE"
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showSuccessToast("User deleted successfully");
+                    loadUsers();
+                } else {
+                    alert("Error: " + (data.message || "Failed to delete user"));
+                }
+            })
+            .catch(err => {
+                console.error("Error:", err);
+                alert("Network error while deleting user");
+            });
+        }
+
+        function showSuccessToast(message) {
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-10 right-10 bg-green-500 text-white px-8 py-4 rounded-2xl shadow-2xl z-50 flex items-center gap-3';
+            toast.innerHTML = `<span class="material-icons-round text-lg">check_circle</span><span>${message}</span>`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
         }
     </script>
 </body>

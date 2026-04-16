@@ -7,6 +7,7 @@
     response.setHeader("Pragma", "no-cache");
     response.setDateHeader("Expires", 0);
 
+    // 🔐 ADMIN SESSION CHECK (IMPORTANT)
     if(session == null || session.getAttribute("role") == null || 
        !"ADMIN".equals(session.getAttribute("role"))){
 
@@ -59,7 +60,7 @@
 
     <div class="flex h-screen">
         <%-- SIDEBAR --%>
-        <%@ include file="/WEB-INF/views/components/admin_sidebar.jsp" %>
+        <%@ include file="/WEB-INF/views/components/sidebar.jsp" %>
 
         <div class="flex-1 flex flex-col overflow-hidden">
             <header class="h-16 bg-white/80 backdrop-blur-md border-b border-gray-100 flex items-center justify-between px-10 z-20">

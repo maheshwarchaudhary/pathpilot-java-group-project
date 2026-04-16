@@ -43,7 +43,7 @@
 <body class="bg-background-light font-sans overflow-hidden">
     <div class="flex h-screen">
         <%-- SIDEBAR --%>
-        <jsp:include page="../components/user_sidebar.jsp" />
+        <jsp:include page="../components/sidebar.jsp" />
 
         <div class="flex-1 flex flex-col overflow-hidden">
             <header class="h-16 bg-white/80 backdrop-blur-md border-b flex items-center justify-between px-10">

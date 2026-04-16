@@ -26,7 +26,7 @@
 </head>
 <body class="bg-background-light antialiased overflow-hidden">
 <div class="flex h-screen">
-<%@ include file="/WEB-INF/views/components/admin_sidebar.jsp" %>
+<%@ include file="/WEB-INF/views/components/sidebar.jsp" %>
     <div class="flex-1 flex flex-col h-screen overflow-hidden">
         <header class="h-16 bg-white border-b border-neutral-border flex items-center justify-between px-6">
             <nav class="text-sm text-neutral-text-subtle flex items-center">

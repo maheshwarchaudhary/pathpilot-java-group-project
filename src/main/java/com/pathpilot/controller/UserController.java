@@ -98,6 +98,23 @@ public class UserController {
         return null; // Access granted
     }
 
+    /**
+     * Check access for both USER (Mentor) and ADMIN roles
+     * For career path management access
+     */
+    private String checkAccessForUserOrAdmin(HttpSession session) {
+        if (session == null || session.getAttribute("role") == null) {
+            return "redirect:/login";
+        }
+
+        String role = session.getAttribute("role").toString().trim().toUpperCase();
+        if (!"USER".equals(role) && !"ADMIN".equals(role)) {
+            return "redirect:/login";
+        }
+
+        return null; // Access granted
+    }
+
     // ==========================================
     // 🏠 DASHBOARD / NAVIGATION
     // ==========================================
@@ -129,20 +146,28 @@ public class UserController {
 
     @GetMapping("/career-mgmt")
     public String careerMgmt(org.springframework.ui.Model model, HttpSession session) {
-        String r = checkAccess(session);
+        String r = checkAccessForUserOrAdmin(session);
         if (r != null) return r;
         
         try {
+            String role = session.getAttribute("role").toString().trim().toUpperCase();
             int userId = (Integer) session.getAttribute("userId");
+            java.util.List<CareerPath> myPaths;
             
-            // Fetch user's roadmaps from database
-            java.util.List<CareerPath> myPaths = pathDAO.getPathsByUserId(userId);
+            // ADMIN can view ALL paths, USER (Mentor) sees only their own
+            if ("ADMIN".equals(role)) {
+                myPaths = pathDAO.getAllPaths();
+                System.out.println("[ADMIN] Loading all career paths");
+            } else {
+                myPaths = pathDAO.getPathsByUserId(userId);
+                System.out.println("[USER] Loading career paths for User ID: " + userId);
+            }
             
-            System.out.println("Loading career paths for User ID: " + userId);
             System.out.println("Found " + (myPaths != null ? myPaths.size() : 0) + " roadmaps");
             
             // Add roadmaps to model for JSP
             model.addAttribute("myPaths", myPaths != null ? myPaths : new java.util.ArrayList<>());
+            model.addAttribute("isAdmin", "ADMIN".equals(role));
             
         } catch (Exception e) {
             System.err.println("Error loading roadmaps: " + e.getMessage());
@@ -170,7 +195,7 @@ public class UserController {
 
     @GetMapping("/create-path")
     public String createPathPage(HttpSession session) {
-        String r = checkAccess(session);
+        String r = checkAccessForUserOrAdmin(session);
         if (r != null) return r;
         return "user/user_create_path";
     }
@@ -188,7 +213,7 @@ public class UserController {
             @RequestParam(value = "status", required = false, defaultValue = "DRAFT") String status,
             HttpServletRequest request,
             HttpSession session) {
-        String r = checkAccess(session);
+        String r = checkAccessForUserOrAdmin(session);
         if (r != null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("UNAUTHORIZED");
         
         try {
@@ -290,7 +315,7 @@ public class UserController {
             @RequestParam("id") int pathId,
             org.springframework.ui.Model model,
             HttpSession session) {
-        String r = checkAccess(session);
+        String r = checkAccessForUserOrAdmin(session);
         if (r != null) return r;
 
         try {
@@ -365,7 +390,7 @@ public class UserController {
             @RequestParam(value = "status", required = false, defaultValue = "DRAFT") String status,
             HttpServletRequest request,
             HttpSession session) {
-        String r = checkAccess(session);
+        String r = checkAccessForUserOrAdmin(session);
         if (r != null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("UNAUTHORIZED");
 
         try {
@@ -968,20 +993,22 @@ public class UserController {
     public String deletePath(
             @RequestParam("pathId") int pathId,
             HttpSession session) {
-        String r = checkAccess(session);
+        String r = checkAccessForUserOrAdmin(session);
         if (r != null) return r;
 
         try {
             int userId = (Integer) session.getAttribute("userId");
+            String role = session.getAttribute("role").toString().trim().toUpperCase();
             
-            // Verify user owns this roadmap before deleting
+            // Verify user/admin can delete this roadmap
             CareerPath path = pathDAO.getPathById(pathId);
             if (path == null) {
                 System.err.println("❌ Roadmap not found: " + pathId);
                 return "redirect:/user/career-mgmt?error=notfound";
             }
             
-            if (path.getCreatedBy() != userId) {
+            // ADMIN can delete any path, USER can only delete their own
+            if (!"ADMIN".equals(role) && path.getCreatedBy() != userId) {
                 System.err.println("❌ Unauthorized delete attempt - User " + userId + " tried to delete path by " + path.getCreatedBy());
                 return "redirect:/user/career-mgmt?error=unauthorized";
             }

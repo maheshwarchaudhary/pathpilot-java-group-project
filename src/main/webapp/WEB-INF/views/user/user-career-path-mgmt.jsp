@@ -69,7 +69,7 @@
 
     <div class="flex h-screen">
         <%-- SIDEBAR --%>
-        <%@ include file="/WEB-INF/views/components/user_sidebar.jsp" %>
+        <%@ include file="/WEB-INF/views/components/sidebar.jsp" %>
 
         <div class="flex-1 flex flex-col overflow-hidden">
             

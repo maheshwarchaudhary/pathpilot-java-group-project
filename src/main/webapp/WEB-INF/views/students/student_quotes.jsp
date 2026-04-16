@@ -50,7 +50,7 @@
 <body class="flex min-h-screen">
 
     <!-- 🧭 Sidebar Included -->
-    <jsp:include page="/WEB-INF/views/components/user_sidebar.jsp" />
+    <jsp:include page="/WEB-INF/views/components/sidebar.jsp" />
 
     <div class="main-content relative">
         

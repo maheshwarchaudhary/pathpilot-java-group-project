@@ -40,9 +40,21 @@ public class UserDAO {
      * Fetches all columns (including role, profile_pic) for verified users.
      */
     public User login(String email, String password) {
-        String sql = "SELECT * FROM users WHERE email = ? AND password = ? AND is_verified = 1";
+        String sql = "SELECT id, name, email, password, phone, role, token, is_verified, profile_pic FROM users WHERE email = ? AND password = ? AND is_verified = 1";
         try {
-            return jdbcTemplate.queryForObject(sql, new BeanPropertyRowMapper<>(User.class), email, password);
+            return jdbcTemplate.queryForObject(sql, (rs, rowNum) -> {
+                User user = new User();
+                user.setId(rs.getInt("id"));
+                user.setName(rs.getString("name"));
+                user.setEmail(rs.getString("email"));
+                user.setPassword(rs.getString("password"));
+                user.setPhone(rs.getString("phone"));
+                user.setRole(rs.getString("role"));
+                user.setToken(rs.getString("token"));
+                user.setVerified(rs.getInt("is_verified") == 1);
+                user.setProfilePic(rs.getString("profile_pic"));
+                return user;
+            }, email, password);
         } catch (Exception e) {
             return null; 
         }
@@ -131,9 +143,21 @@ public class UserDAO {
      * Useful for refreshing session data.
      */
     public User getUserById(int id) {
-        String sql = "SELECT * FROM users WHERE id = ?";
+        String sql = "SELECT id, name, email, password, phone, role, token, is_verified, profile_pic FROM users WHERE id = ?";
         try {
-            return jdbcTemplate.queryForObject(sql, new BeanPropertyRowMapper<>(User.class), id);
+            return jdbcTemplate.queryForObject(sql, (rs, rowNum) -> {
+                User user = new User();
+                user.setId(rs.getInt("id"));
+                user.setName(rs.getString("name"));
+                user.setEmail(rs.getString("email"));
+                user.setPassword(rs.getString("password"));
+                user.setPhone(rs.getString("phone"));
+                user.setRole(rs.getString("role"));
+                user.setToken(rs.getString("token"));
+                user.setVerified(rs.getInt("is_verified") == 1);
+                user.setProfilePic(rs.getString("profile_pic"));
+                return user;
+            }, id);
         } catch (Exception e) {
             return null;
         }
@@ -156,10 +180,48 @@ public class UserDAO {
      * Get users by role (e.g., ADMIN, MENTOR)
      */
     public java.util.List<User> getUsersByRole(String role) {
-        String sql = "SELECT * FROM users WHERE role = ? ORDER BY created_at DESC";
+        String sql = "SELECT id, name, email, password, phone, role, token, is_verified FROM users WHERE role = ? ORDER BY id DESC";
         try {
-            return jdbcTemplate.query(sql, new BeanPropertyRowMapper<>(User.class), role);
+            return jdbcTemplate.query(sql, (rs, rowNum) -> {
+                User user = new User();
+                user.setId(rs.getInt("id"));
+                user.setName(rs.getString("name"));
+                user.setEmail(rs.getString("email"));
+                user.setPassword(rs.getString("password"));
+                user.setPhone(rs.getString("phone"));
+                user.setRole(rs.getString("role"));
+                user.setToken(rs.getString("token"));
+                user.setVerified(rs.getInt("is_verified") == 1);
+                return user;
+            }, role);
         } catch (Exception e) {
+            e.printStackTrace();
+            System.out.println("Error fetching users by role: " + e.getMessage());
+            return new java.util.ArrayList<>();
+        }
+    }
+
+    /**
+     * Get all users from the database
+     */
+    public java.util.List<User> getAllUsers() {
+        String sql = "SELECT id, name, email, password, phone, role, token, is_verified FROM users ORDER BY id DESC";
+        try {
+            return jdbcTemplate.query(sql, (rs, rowNum) -> {
+                User user = new User();
+                user.setId(rs.getInt("id"));
+                user.setName(rs.getString("name"));
+                user.setEmail(rs.getString("email"));
+                user.setPassword(rs.getString("password"));
+                user.setPhone(rs.getString("phone"));
+                user.setRole(rs.getString("role"));
+                user.setToken(rs.getString("token"));
+                user.setVerified(rs.getInt("is_verified") == 1);
+                return user;
+            });
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.out.println("Error fetching all users: " + e.getMessage());
             return new java.util.ArrayList<>();
         }
     }

@@ -57,9 +57,7 @@
 
 <body class="bg-bg-main min-h-screen flex antialiased overflow-x-hidden">
 
-    <jsp:include page="/WEB-INF/views/components/user_sidebar.jsp"/>
-
-    <main class="flex-grow p-6 lg:p-10 overflow-y-auto">
+    <jsp:include page="/WEB-INF/views/components/sidebar.jsp"/>
         
         <%-- Top Identity Card --%>
         <div class="max-w-4xl mx-auto bg-white rounded-[2rem] p-8 border border-gray-100 shadow-sm flex flex-col md:flex-row items-center justify-between mb-8">

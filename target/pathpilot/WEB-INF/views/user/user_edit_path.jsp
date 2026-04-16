@@ -72,7 +72,7 @@
 
 <div class="flex h-screen">
 
-    <jsp:include page="../components/user_sidebar.jsp" />
+    <jsp:include page="../components/sidebar.jsp" />
 
     <div class="flex-1 flex flex-col overflow-hidden">
 

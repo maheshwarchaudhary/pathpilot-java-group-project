@@ -58,7 +58,7 @@
 <div class="flex h-screen">
 
     <!-- ✅ Sidebar (Now inherits correct fonts) -->
-    <%@ include file="/WEB-INF/views/components/admin_sidebar.jsp" %>
+    <%@ include file="/WEB-INF/views/components/sidebar.jsp" %>
 
     <div class="flex-1 flex flex-col h-screen overflow-hidden">
 
